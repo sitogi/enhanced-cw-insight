@@ -1,5 +1,5 @@
 {
-  "name": "chrome-ext-ts-template",
+  "name": "enhanced-cw-insight",
   "version": "1.0.0",
   "scripts": {
     "build": "rm -rf dist && vite build"
