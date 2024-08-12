@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "My Chrome Extension With TypeScript",
+  "version": "1.0",
+  "description": "A simple Chrome extension with TypeScript and Vite",
+  "permissions": ["activeTab", "scripting"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
