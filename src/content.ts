@@ -1,22 +1,33 @@
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('content loaded');
-});
+console.log('enhanced-cw-insight is loaded!');
 
-console.log('content.ts loaded');
+const searchLogIframeInterval = setInterval(() => {
+  const iframeElement = document.querySelector('iframe#microConsole-Logs') as HTMLIFrameElement | null;
 
-setTimeout(() => {
-  console.log('content.ts loaded after 2 seconds');
-  const pageTitle = document.title;
-  console.log('Page Title:', pageTitle);
-}, 2000);
+  if (iframeElement) {
+    console.log('Iframe found:', iframeElement);
+    clearInterval(searchLogIframeInterval);
 
-makeRequestIdLink();
+    setInterval(() => {
+      const iframeDocument = iframeElement.contentWindow?.document;
+      if (iframeDocument == null) {
+        console.log('iframe 内の document オブジェクトが取得できませんでした。');
+        return;
+      }
+      // 変換処理
+      convertRequestIdToLink(iframeDocument);
+    }, 1500);
+  } else {
+    console.log('Iframe not found, checking again...');
+  }
+}, 1000);
 
-function makeRequestIdLink() {
-  const headerRow = document.querySelector('.logs-table__header-row');
+function convertRequestIdToLink(doc: Document) {
+  console.log('変換処理を開始します。');
+  // const headerRow = document.querySelector('.logs-table__header-row');
+  const headerRow = doc.querySelector('thead tr');
 
   if (headerRow == null) {
-    console.error('HeaderRow is not found');
+    console.log('HeaderRow is not found');
     return;
   }
 
@@ -25,12 +36,11 @@ function makeRequestIdLink() {
   const requestIdIndex = thElements.findIndex((th) => th?.textContent?.includes('@requestId'));
 
   if (requestIdIndex === -1) {
-    console.error('@requestId column is not found.');
+    console.log('@requestId column is not found.');
+    return;
   }
 
-  console.log(requestIdIndex);
-
-  const rows = document.querySelectorAll('.logs-table__body-row');
+  const rows = doc.querySelectorAll('.logs-table__body-row');
 
   for (const row of rows) {
     const cells = Array.from(row.querySelectorAll('.logs-table__body-cell'));
@@ -43,21 +53,27 @@ function makeRequestIdLink() {
     const link = document.createElement('a');
     link.href = createRequestIdQueryUrl(window.location.href, requestId);
     link.textContent = requestId;
+    link.target = '_blank';
+    link.onclick = (event) => event.stopPropagation(); // アコーディオンの開閉を抑制
+
     requestIdCell.innerHTML = '';
     requestIdCell.appendChild(link);
   }
 }
 
 export function createRequestIdQueryUrl(currentUrl: string, requestId: string): string {
-  const newEditorString = `'fields*20*40timestamp*2c*20*40requestId*2c*20*40message*0a*7c*20filter*20*40requestId*20*3d*20*27${requestId}*27*0a*7c*20sort*20*40timestamp*20desc*0a*7c*20limit*2010000`;
+  // TODO: (できれば) 昇順/降順とか、表示するフィールドとか、ある程度ユーザーが調整できるのがベストだけど...
+  // TODO: (必須) その requestId のタイムスタンプの前後 30 分を絶対時間として指定したい
+  const newEditorString = `'fields*20*40timestamp*2c*20*40requestId*2c*20*40message*0a*7c*20filter*20*40requestId*20*3d*20*27${requestId}*27*0a*7c*20sort*20*40timestamp*20desc*0a*7c*20limit*201000`;
   const [left, right] = currentUrl.split('~editorString~');
   const nextQueryIndex = right.indexOf('~');
 
-  if (nextQueryIndex === -1) {
-    return [left, '~editorString~', newEditorString].join('');
-  }
-
-  return [left, '~editorString~', newEditorString, right.substring(nextQueryIndex)].join('');
+  return [
+    left,
+    '~editorString~',
+    newEditorString,
+    nextQueryIndex === -1 ? undefined : right.substring(nextQueryIndex),
+  ].join('');
 }
 
 // export function parseCWInsightUrl(fullUrl: string) {
