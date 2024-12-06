@@ -58,7 +58,10 @@ function convertRequestIdToLink(doc: Document) {
 
     requestIdCell.innerHTML = '';
     requestIdCell.appendChild(link);
+    console.log('変換しました。');
   }
+
+  console.log('変換処理を終了します。');
 }
 
 export function createRequestIdQueryUrl(currentUrl: string, requestId: string): string {

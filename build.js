@@ -13,7 +13,7 @@ if (!fs.existsSync(outputDir)) {
 // content.js
 try {
   await esbuild.build({
-    entryPoints: ['src/content.ts'],
+    entryPoints: ['src/content.ts', 'src/background.ts'],
     outdir: outputDir,
     bundle: true,
     minify: true,
