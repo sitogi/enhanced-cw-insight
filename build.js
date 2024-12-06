@@ -1,8 +1,8 @@
-const esbuild = require('esbuild');
-const fs = require('fs');
-const path = require('path');
+import esbuild from 'esbuild';
+import fs from 'fs';
+import path from 'path';
+import packageJson from './package.json' assert { type: 'json' };
 
-const packageJson = require('./package.json');
 const appName = packageJson.name;
 const outputDir = `dist/${appName}`;
 
@@ -11,13 +11,17 @@ if (!fs.existsSync(outputDir)) {
 }
 
 // content.js
-esbuild.build({
-  entryPoints: ['src/content.ts'],
-  outfile: path.join(outputDir, 'content.js'),
-  bundle: true,
-  minify: true,
-  sourcemap: false,
-}).catch(() => process.exit(1));
+try {
+  await esbuild.build({
+    entryPoints: ['src/content.ts'],
+    outdir: outputDir,
+    bundle: true,
+    minify: true,
+    sourcemap: false,
+  })
+} catch (e) {
+  process.exit(1);
+}
 
 // manifest.json
 fs.copyFileSync('src/manifest.json', path.join(outputDir, 'manifest.json'));
