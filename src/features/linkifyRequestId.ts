@@ -1,4 +1,5 @@
 export const linkifyRequestId = () => {
+  // TODO: ここも MutationObserver を利用するよう最適化する
   const searchLogIframeInterval = setInterval(() => {
     const iframeElement = document.querySelector('iframe#microConsole-Logs') as HTMLIFrameElement | null;
 
@@ -6,33 +7,43 @@ export const linkifyRequestId = () => {
       console.log('Iframe found:', iframeElement);
       clearInterval(searchLogIframeInterval);
 
-      setInterval(() => {
-        const iframeDocument = iframeElement.contentWindow?.document;
-        if (iframeDocument == null) {
-          console.log('iframe 内の document オブジェクトが取得できませんでした。');
-          return;
+      const iframeDocument = iframeElement.contentWindow?.document;
+      if (iframeDocument == null) {
+        console.log('iframe 内の document オブジェクトが取得できませんでした。');
+        return;
+      }
+      const iframeObserver = new MutationObserver((mutations) => {
+        for (const mu of mutations) {
+          for (const addedNode of mu.addedNodes) {
+            if (addedNode instanceof HTMLElement) {
+              if (addedNode.classList.contains('logs-table__body-row')) {
+                console.log('テーブルの行が新しく追加されたよ');
+                convertRequestIdToLink(iframeDocument, addedNode);
+              }
+            }
+          }
         }
-        // 変換処理
-        convertRequestIdToLink(iframeDocument);
-      }, 1500);
+      });
+
+      // iframe内のDOM変化を監視
+      iframeObserver.observe(iframeDocument, { childList: true, subtree: true });
     } else {
       console.log('Iframe not found, checking again...');
     }
   }, 1000);
 };
 
-function convertRequestIdToLink(doc: Document) {
+function convertRequestIdToLink(doc: Document, row: HTMLElement) {
   console.log('変換処理を開始します。');
-  // const headerRow = document.querySelector('.logs-table__header-row');
-  const headerRow = doc.querySelector('thead tr');
 
+  // TODO: ここの requestIdIndex 算出も一度だけ行われるように最適化したい
+  const headerRow = doc.querySelector('.logs-table__header-row');
   if (headerRow == null) {
     console.log('HeaderRow is not found');
     return;
   }
 
   const thElements = Array.from(headerRow.querySelectorAll('th'));
-
   const requestIdIndex = thElements.findIndex((th) => th?.textContent?.includes('@requestId'));
 
   if (requestIdIndex === -1) {
@@ -40,26 +51,22 @@ function convertRequestIdToLink(doc: Document) {
     return;
   }
 
-  const rows = doc.querySelectorAll('.logs-table__body-row');
-
-  for (const row of rows) {
-    const cells = Array.from(row.querySelectorAll('.logs-table__body-cell'));
-    const requestIdCell = cells[requestIdIndex];
-    const requestId = requestIdCell.textContent?.trim();
-    if (requestId == null) {
-      return;
-    }
-
-    const link = document.createElement('a');
-    link.href = createRequestIdQueryUrl(window.location.href, requestId);
-    link.textContent = requestId;
-    link.target = '_blank';
-    link.onclick = (event) => event.stopPropagation(); // アコーディオンの開閉を抑制
-
-    requestIdCell.innerHTML = '';
-    requestIdCell.appendChild(link);
-    console.log('変換しました。');
+  const cells = Array.from(row.querySelectorAll('.logs-table__body-cell'));
+  const requestIdCell = cells[requestIdIndex];
+  const requestId = requestIdCell.textContent?.trim();
+  if (requestId == null) {
+    return;
   }
+
+  const link = document.createElement('a');
+  link.href = createRequestIdQueryUrl(window.location.href, requestId);
+  link.textContent = requestId;
+  link.target = '_blank';
+  link.onclick = (event) => event.stopPropagation(); // アコーディオンの開閉を抑制
+
+  requestIdCell.innerHTML = '';
+  requestIdCell.appendChild(link);
+  console.log('変換しました。');
 
   console.log('変換処理を終了します。');
 }
