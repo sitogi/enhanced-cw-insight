@@ -1,42 +1,36 @@
 export const linkifyRequestId = () => {
-  // TODO: MutationObserver のネストが地獄なので要リファクタ
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-        // 追加されたノードを処理
-        for (const addedNode of mutation.addedNodes) {
-          if (addedNode instanceof HTMLElement) {
-            const iframeElement = addedNode.querySelector('iframe#microConsole-Logs') as HTMLIFrameElement | null;
+  // TODO: ここも MutationObserver を利用するよう最適化する
+  const searchLogIframeInterval = setInterval(() => {
+    const iframeElement = document.querySelector('iframe#microConsole-Logs') as HTMLIFrameElement | null;
 
-            if (iframeElement) {
-              console.log('Iframe found:', iframeElement);
-              const iframeDocument = iframeElement.contentWindow?.document;
-              if (iframeDocument == null) {
-                console.log('iframe 内の document オブジェクトが取得できませんでした。');
-                return;
+    if (iframeElement) {
+      console.log('Iframe found:', iframeElement);
+      clearInterval(searchLogIframeInterval);
+
+      const iframeDocument = iframeElement.contentWindow?.document;
+      if (iframeDocument == null) {
+        console.log('iframe 内の document オブジェクトが取得できませんでした。');
+        return;
+      }
+      const iframeObserver = new MutationObserver((mutations) => {
+        for (const mu of mutations) {
+          for (const addedNode of mu.addedNodes) {
+            if (addedNode instanceof HTMLElement) {
+              if (addedNode.classList.contains('logs-table__body-row')) {
+                console.log('テーブルの行が新しく追加されたよ');
+                convertRequestIdToLink(iframeDocument, addedNode);
               }
-              const iframeObserver = new MutationObserver((mutations) => {
-                for (const mu of mutations) {
-                  for (const addedNode of mu.addedNodes) {
-                    if (addedNode instanceof HTMLElement) {
-                      if (addedNode.classList.contains('logs-table__body-row')) {
-                        convertRequestIdToLink(iframeDocument, addedNode);
-                      }
-                    }
-                  }
-                }
-              });
-
-              // iframe内のDOM変化を監視
-              iframeObserver.observe(iframeDocument, { childList: true, subtree: true });
             }
           }
         }
-      }
-    }
-  });
+      });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+      // iframe内のDOM変化を監視
+      iframeObserver.observe(iframeDocument, { childList: true, subtree: true });
+    } else {
+      console.log('Iframe not found, checking again...');
+    }
+  }, 1000);
 };
 
 function convertRequestIdToLink(doc: Document, row: HTMLElement) {
