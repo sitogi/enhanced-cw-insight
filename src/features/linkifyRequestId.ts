@@ -26,6 +26,20 @@ export const linkifyRequestId = () => {
                     convertRequestIdToLink(iframeDocument, row);
                   }
                 }
+
+                // もし パラメータに autoExecute=true があったら data-testid='scroll-run-query' のボタンをクリック
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('autoExecute') === 'true') {
+                  const runButton = addedNode.querySelector(
+                    '[data-testid="scroll-run-query"]',
+                  ) as HTMLButtonElement | null;
+                  if (runButton) {
+                    runButton.click();
+                    console.log('autoExecute が true のため、実行ボタンをクリックしました。');
+                  } else {
+                    console.log('autoExecute が true ですが、実行ボタンが見つかりませんでした。');
+                  }
+                }
               }
             }
           }
@@ -86,12 +100,20 @@ export function createRequestIdQueryUrl(currentUrl: string, requestId: string): 
   const [left, right] = currentUrl.split('~editorString~');
   const nextQueryIndex = right.indexOf('~');
 
-  return [
+  const url = [
     left,
     '~editorString~',
     newEditorString,
     nextQueryIndex === -1 ? undefined : right.substring(nextQueryIndex),
   ].join('');
+
+  // パラメータ autoExecute=true を付与
+  const urlObject = new URL(url, window.location.origin); // window.location.origin を指定してベースURLを正しく設定
+  const params = new URLSearchParams(urlObject.search);
+  params.set('autoExecute', 'true');
+  urlObject.search = params.toString();
+  const urlWithAutoExecute = urlObject.toString();
+  return urlWithAutoExecute;
 }
 
 // export function parseCWInsightUrl(fullUrl: string) {
