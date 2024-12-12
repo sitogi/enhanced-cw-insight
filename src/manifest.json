@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "My Chrome Extension With TypeScript",
+  "name": "Enhanced CloudWatch Insight",
   "version": "1.0",
-  "description": "A simple Chrome extension with TypeScript and Vite",
+  "description": "",
   "permissions": ["activeTab", "scripting"],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://ap-northeast-1.console.aws.amazon.com/cloudwatch/*"],
       "js": ["content.js"]
     }
   ]
