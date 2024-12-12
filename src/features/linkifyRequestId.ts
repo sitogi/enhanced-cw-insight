@@ -1,7 +1,7 @@
 export const linkifyRequestId = () => {
   // TODO: ここも MutationObserver を利用するよう最適化する
   const searchLogIframeInterval = setInterval(() => {
-    const iframeElement = document.querySelector('iframe#microConsole-Logs') as HTMLIFrameElement | null;
+    const iframeElement = document.querySelector('#microConsole-Logs') as HTMLIFrameElement | null;
 
     if (iframeElement) {
       console.log('Iframe found:', iframeElement);
@@ -12,13 +12,20 @@ export const linkifyRequestId = () => {
         console.log('iframe 内の document オブジェクトが取得できませんでした。');
         return;
       }
+
       const iframeObserver = new MutationObserver((mutations) => {
         for (const mu of mutations) {
-          for (const addedNode of mu.addedNodes) {
-            if (addedNode instanceof HTMLElement) {
-              if (addedNode.classList.contains('logs-table__body-row')) {
-                console.log('テーブルの行が新しく追加されたよ');
-                convertRequestIdToLink(iframeDocument, addedNode);
+          if (mu.type === 'childList') {
+            for (const addedNode of mu.addedNodes) {
+              if (addedNode instanceof HTMLElement) {
+                if (addedNode.classList.contains('logs-table__body-row')) {
+                  convertRequestIdToLink(iframeDocument, addedNode);
+                } else {
+                  const rows = addedNode.querySelectorAll('.logs-table__body-row');
+                  for (const row of rows) {
+                    convertRequestIdToLink(iframeDocument, row);
+                  }
+                }
               }
             }
           }
@@ -34,7 +41,7 @@ export const linkifyRequestId = () => {
   }, 1000);
 };
 
-function convertRequestIdToLink(doc: Document, row: HTMLElement) {
+function convertRequestIdToLink(doc: Document, row: Element) {
   console.log('変換処理を開始します。');
 
   // TODO: ここの requestIdIndex 算出も一度だけ行われるように最適化したい
