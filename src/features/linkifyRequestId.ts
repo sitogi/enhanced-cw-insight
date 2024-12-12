@@ -26,7 +26,8 @@ export const linkifyRequestId = () => {
       });
 
       // iframe内のDOM変化を監視
-      iframeObserver.observe(iframeDocument, { childList: true, subtree: true });
+      console.log('ログテーブルが存在する iframe.body の監視を開始します。');
+      iframeObserver.observe(iframeDocument.body, { childList: true, subtree: true });
     } else {
       console.log('Iframe not found, checking again...');
     }
