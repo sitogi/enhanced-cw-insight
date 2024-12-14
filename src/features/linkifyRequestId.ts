@@ -19,11 +19,13 @@ export const linkifyRequestId = () => {
             for (const addedNode of mu.addedNodes) {
               if (addedNode instanceof HTMLElement) {
                 if (addedNode.classList.contains('logs-table__body-row')) {
-                  convertRequestIdToLink(iframeDocument, addedNode);
+                  // convertRequestIdToLink(iframeDocument, addedNode);
+                  makeUuidLink(iframeDocument, addedNode);
                 } else {
                   const rows = addedNode.querySelectorAll('.logs-table__body-row');
                   for (const row of rows) {
-                    convertRequestIdToLink(iframeDocument, row);
+                    // convertRequestIdToLink(iframeDocument, row);
+                    makeUuidLink(iframeDocument, row);
                   }
                 }
 
@@ -55,42 +57,27 @@ export const linkifyRequestId = () => {
   }, 1000);
 };
 
-function convertRequestIdToLink(doc: Document, row: Element) {
-  console.log('変換処理を開始します。');
+function makeUuidLink(doc: Document, trElement: Element) {
+  const tdElements = trElement.querySelectorAll('.logs-table__body-cell');
 
-  // TODO: ここの requestIdIndex 算出も一度だけ行われるように最適化したい
-  const headerRow = doc.querySelector('.logs-table__header-row');
-  if (headerRow == null) {
-    console.log('HeaderRow is not found');
-    return;
+  for (const tdElement of tdElements) {
+    const textContent = tdElement.textContent ?? '';
+
+    const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
+    const uuidMatch = textContent.match(uuidRegex);
+
+    if (uuidMatch) {
+      const uuid = uuidMatch[0];
+
+      const link = doc.createElement('a');
+      link.href = createRequestIdQueryUrl(window.location.href, uuid);
+      link.textContent = uuid;
+      link.target = '_blank';
+      link.onclick = (event) => event.stopPropagation(); // アコーディオンの開閉を抑制
+
+      tdElement.innerHTML = textContent.replace(uuid, link.outerHTML);
+    }
   }
-
-  const thElements = Array.from(headerRow.querySelectorAll('th'));
-  const requestIdIndex = thElements.findIndex((th) => th?.textContent?.includes('@requestId'));
-
-  if (requestIdIndex === -1) {
-    console.log('@requestId column is not found.');
-    return;
-  }
-
-  const cells = Array.from(row.querySelectorAll('.logs-table__body-cell'));
-  const requestIdCell = cells[requestIdIndex];
-  const requestId = requestIdCell.textContent?.trim();
-  if (requestId == null) {
-    return;
-  }
-
-  const link = document.createElement('a');
-  link.href = createRequestIdQueryUrl(window.location.href, requestId);
-  link.textContent = requestId;
-  link.target = '_blank';
-  link.onclick = (event) => event.stopPropagation(); // アコーディオンの開閉を抑制
-
-  requestIdCell.innerHTML = '';
-  requestIdCell.appendChild(link);
-  console.log('変換しました。');
-
-  console.log('変換処理を終了します。');
 }
 
 export function createRequestIdQueryUrl(currentUrl: string, requestId: string): string {
@@ -107,7 +94,7 @@ export function createRequestIdQueryUrl(currentUrl: string, requestId: string): 
     nextQueryIndex === -1 ? undefined : right.substring(nextQueryIndex),
   ].join('');
 
-  // パラメータ autoExecute=true を付与
+  // 自動でクエリの実行をしたいので、パラメータに autoExecute=true を付与しておく
   const urlObject = new URL(url, window.location.origin); // window.location.origin を指定してベースURLを正しく設定
   const params = new URLSearchParams(urlObject.search);
   params.set('autoExecute', 'true');
