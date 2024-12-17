@@ -57,8 +57,50 @@ export const linkifyRequestId = () => {
   }, 1000);
 };
 
+type TimeInfo = {
+  tz: 'LOCAL' | 'UTC';
+  startUtcTime: string;
+  endUtcTime: string;
+};
+
+const calcTimeRange = (tdElements: NodeListOf<Element>): TimeInfo | undefined => {
+  for (const tdElement of tdElements) {
+    const textContent = tdElement.textContent ?? '';
+
+    const localTimestampRegex = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+\d{2}:\d{2}/;
+    const localTimestampMatch = textContent.match(localTimestampRegex);
+    if (localTimestampMatch) {
+      const timestamp = localTimestampMatch[0];
+      const date = new Date(timestamp);
+      // 前後 15 分の ISOString を取得
+      const startUtcTime = new Date(date.getTime() - 15 * 60 * 1000).toISOString();
+      const endUtcTime = new Date(date.getTime() + 15 * 60 * 1000).toISOString();
+
+      return { tz: 'LOCAL', startUtcTime, endUtcTime };
+    }
+
+    const utcTimestampRegex = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/;
+    const utcTimestampMatch = textContent.match(utcTimestampRegex);
+    if (utcTimestampMatch) {
+      const timestamp = utcTimestampMatch[0];
+      const date = new Date(timestamp);
+      // 前後 15 分の ISOString を取得
+      const startUtcTime = new Date(date.getTime() - 15 * 60 * 1000).toISOString();
+      const endUtcTime = new Date(date.getTime() + 15 * 60 * 1000).toISOString();
+
+      return { tz: 'UTC', startUtcTime, endUtcTime };
+    }
+  }
+
+  return undefined;
+};
+
 function makeUuidLink(doc: Document, trElement: Element) {
   const tdElements = trElement.querySelectorAll('.logs-table__body-cell');
+
+  // 先に `2024-12-14T21:13:52.897+09:00` のような timestamp カラムがあるかどうかをチェックする
+  const timeInfo = calcTimeRange(tdElements);
+  console.log({ timeInfo });
 
   for (const tdElement of tdElements) {
     const textContent = tdElement.textContent ?? '';
@@ -70,7 +112,7 @@ function makeUuidLink(doc: Document, trElement: Element) {
       const uuid = uuidMatch[0];
 
       const link = doc.createElement('a');
-      link.href = buildUrlWithReqIdFiltering(window.location.href, uuid);
+      link.href = buildUrlWithReqIdFiltering(window.location.href, uuid, timeInfo);
       link.textContent = uuid;
       link.target = '_blank';
       link.onclick = (event) => event.stopPropagation(); // アコーディオンの開閉を抑制
@@ -80,13 +122,22 @@ function makeUuidLink(doc: Document, trElement: Element) {
   }
 }
 
-export function buildUrlWithReqIdFiltering(currentUrl: string, requestId: string): string {
-  // TODO: (できれば) 昇順/降順とか、表示するフィールドとか、ある程度ユーザーが調整できるのがベストだけど...
-  // TODO: (必須) その requestId のタイムスタンプの前後 30 分を絶対時間として指定したい
+export function buildUrlWithReqIdFiltering(
+  currentUrl: string,
+  requestId: string,
+  timeInfo: TimeInfo | undefined,
+): string {
   const [left, right] = currentUrl.split('~editorString~');
   const nextQueryIndex = right.indexOf('~');
   const currentEditorString = right.substring(0, nextQueryIndex === -1 ? undefined : nextQueryIndex);
   const otherQuery = nextQueryIndex === -1 ? '' : right.substring(nextQueryIndex);
+
+  // left のうちの `(` から終わりまでが時間指定の部分
+  const [base, currentTimeQuery] = left.split('(');
+  // 時間の特定ができている場合は、その時間を絶対値指定することで無駄なスキャンを減らす
+  const newTimeQuery = timeInfo
+    ? `(end~'${timeInfo.endUtcTime.replaceAll(':', '*3a')}~start~'${timeInfo.startUtcTime.replaceAll(':', '*3a')}~timeType~'ABSOLUTE~tz~'${timeInfo.tz}`
+    : currentTimeQuery;
 
   const newEditorStringParts: string[] = [currentEditorString];
   const { isRequestIdExist, isMessageExist } = isRequestIdOrMessageExistInFields(currentEditorString);
@@ -103,16 +154,15 @@ export function buildUrlWithReqIdFiltering(currentUrl: string, requestId: string
     newEditorStringParts.push(fallback);
   }
 
-  const url = [left, '~editorString~', newEditorStringParts.join(''), otherQuery].join('');
+  const url = [base, newTimeQuery, '~editorString~', newEditorStringParts.join(''), otherQuery].join('');
 
   // 自動でクエリの実行をしたいので、パラメータに autoExecute=true を付与しておく
   const urlObject = new URL(url, window.location.origin); // window.location.origin を指定してベースURLを正しく設定
   const params = new URLSearchParams(urlObject.search);
   params.set('autoExecute', 'true');
   urlObject.search = params.toString();
-  const urlWithAutoExecute = urlObject.toString();
 
-  return urlWithAutoExecute;
+  return urlObject.toString();
 }
 
 function isRequestIdOrMessageExistInFields(editorString: string): {
