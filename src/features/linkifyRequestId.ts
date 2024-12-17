@@ -70,7 +70,7 @@ function makeUuidLink(doc: Document, trElement: Element) {
       const uuid = uuidMatch[0];
 
       const link = doc.createElement('a');
-      link.href = createRequestIdQueryUrl(window.location.href, uuid);
+      link.href = buildUrlWithReqIdFiltering(window.location.href, uuid);
       link.textContent = uuid;
       link.target = '_blank';
       link.onclick = (event) => event.stopPropagation(); // アコーディオンの開閉を抑制
@@ -80,19 +80,16 @@ function makeUuidLink(doc: Document, trElement: Element) {
   }
 }
 
-export function createRequestIdQueryUrl(currentUrl: string, requestId: string): string {
+export function buildUrlWithReqIdFiltering(currentUrl: string, requestId: string): string {
   // TODO: (できれば) 昇順/降順とか、表示するフィールドとか、ある程度ユーザーが調整できるのがベストだけど...
   // TODO: (必須) その requestId のタイムスタンプの前後 30 分を絶対時間として指定したい
   const newEditorString = `'fields*20*40timestamp*2c*20*40requestId*2c*20*40message*0a*7c*20filter*20*40requestId*20*3d*20*27${requestId}*27*0a*7c*20sort*20*40timestamp*20desc*0a*7c*20limit*201000`;
   const [left, right] = currentUrl.split('~editorString~');
   const nextQueryIndex = right.indexOf('~');
+  // const currentEditorString = right.substring(0, nextQueryIndex === -1 ? undefined : nextQueryIndex);
+  const otherQuery = nextQueryIndex === -1 ? '' : right.substring(nextQueryIndex);
 
-  const url = [
-    left,
-    '~editorString~',
-    newEditorString,
-    nextQueryIndex === -1 ? undefined : right.substring(nextQueryIndex),
-  ].join('');
+  const url = [left, '~editorString~', newEditorString, otherQuery].join('');
 
   // 自動でクエリの実行をしたいので、パラメータに autoExecute=true を付与しておく
   const urlObject = new URL(url, window.location.origin); // window.location.origin を指定してベースURLを正しく設定
@@ -100,6 +97,7 @@ export function createRequestIdQueryUrl(currentUrl: string, requestId: string): 
   params.set('autoExecute', 'true');
   urlObject.search = params.toString();
   const urlWithAutoExecute = urlObject.toString();
+
   return urlWithAutoExecute;
 }
 
