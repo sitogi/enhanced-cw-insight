@@ -83,13 +83,27 @@ function makeUuidLink(doc: Document, trElement: Element) {
 export function buildUrlWithReqIdFiltering(currentUrl: string, requestId: string): string {
   // TODO: (できれば) 昇順/降順とか、表示するフィールドとか、ある程度ユーザーが調整できるのがベストだけど...
   // TODO: (必須) その requestId のタイムスタンプの前後 30 分を絶対時間として指定したい
-  const newEditorString = `'fields*20*40timestamp*2c*20*40requestId*2c*20*40message*0a*7c*20filter*20*40requestId*20*3d*20*27${requestId}*27*0a*7c*20sort*20*40timestamp*20desc*0a*7c*20limit*201000`;
   const [left, right] = currentUrl.split('~editorString~');
   const nextQueryIndex = right.indexOf('~');
-  // const currentEditorString = right.substring(0, nextQueryIndex === -1 ? undefined : nextQueryIndex);
+  const currentEditorString = right.substring(0, nextQueryIndex === -1 ? undefined : nextQueryIndex);
   const otherQuery = nextQueryIndex === -1 ? '' : right.substring(nextQueryIndex);
 
-  const url = [left, '~editorString~', newEditorString, otherQuery].join('');
+  const newEditorStringParts: string[] = [currentEditorString];
+  const { isRequestIdExist, isMessageExist } = isRequestIdOrMessageExistInFields(currentEditorString);
+  if (isRequestIdExist) {
+    // 末尾に `\n|filter @requestId = 'uuid'` を追加
+    newEditorStringParts.push(`*0a*7c*20filter*20*40requestId*20*3d*20*27${requestId}*27`);
+  } else if (isMessageExist) {
+    // 末尾に `\n|filter @message like /uuid/` を追加
+    newEditorStringParts.push(`*0a*7c*20filter*20*40message*20like*20*2f${requestId}*2f`);
+  } else {
+    // newEditorStringParts を一度クリアし、fallbackEditorString を追加
+    newEditorStringParts.length = 0;
+    const fallback = `'fields*20*40timestamp*2c*20*40requestId*2c*20*40message*0a*7c*20filter*20*40requestId*20*3d*20*27${requestId}*27*0a*7c*20sort*20*40timestamp*20desc*0a*7c*20limit*201000`;
+    newEditorStringParts.push(fallback);
+  }
+
+  const url = [left, '~editorString~', newEditorStringParts.join(''), otherQuery].join('');
 
   // 自動でクエリの実行をしたいので、パラメータに autoExecute=true を付与しておく
   const urlObject = new URL(url, window.location.origin); // window.location.origin を指定してベースURLを正しく設定
@@ -99,6 +113,16 @@ export function buildUrlWithReqIdFiltering(currentUrl: string, requestId: string
   const urlWithAutoExecute = urlObject.toString();
 
   return urlWithAutoExecute;
+}
+
+function isRequestIdOrMessageExistInFields(editorString: string): {
+  isRequestIdExist: boolean;
+  isMessageExist: boolean;
+} {
+  return {
+    isRequestIdExist: editorString.includes('*40requestId'),
+    isMessageExist: editorString.includes('*40message'),
+  };
 }
 
 // export function parseCWInsightUrl(fullUrl: string) {
