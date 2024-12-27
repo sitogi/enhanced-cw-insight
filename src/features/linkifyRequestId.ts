@@ -126,7 +126,7 @@ export function buildUrlWithReqIdFiltering(
   requestId: string,
   timeInfo: TimeInfo | undefined,
 ): string {
-  const [left, right] = currentUrl.split('~editorString~');
+  const [left, right] = currentUrl.split(`~editorString~'`);
   const nextQueryIndex = right.indexOf('~');
   const currentEditorString = right.substring(0, nextQueryIndex === -1 ? undefined : nextQueryIndex);
   const otherQuery = nextQueryIndex === -1 ? '' : right.substring(nextQueryIndex);
@@ -138,22 +138,21 @@ export function buildUrlWithReqIdFiltering(
     ? `(end~'${timeInfo.endUtcTime.replaceAll(':', '*3a')}~start~'${timeInfo.startUtcTime.replaceAll(':', '*3a')}~timeType~'ABSOLUTE~tz~'${timeInfo.tz}`
     : currentTimeQuery;
 
-  const newEditorStringParts: string[] = [currentEditorString];
-  const { isRequestIdExist, isMessageExist } = isRequestIdOrMessageExistInFields(currentEditorString);
-  if (isRequestIdExist) {
-    // 末尾に `\n|filter @requestId = 'uuid'` を追加
-    newEditorStringParts.push(`*0a*7c*20filter*20*40requestId*20*3d*20*27${requestId}*27`);
-  } else if (isMessageExist) {
-    // 末尾に `\n|filter @message like /uuid/` を追加
-    newEditorStringParts.push(`*0a*7c*20filter*20*40message*20like*20*2f${requestId}*2f`);
-  } else {
-    // newEditorStringParts を一度クリアし、fallbackEditorString を追加
-    newEditorStringParts.length = 0;
-    const fallback = `'fields*20*40timestamp*2c*20*40requestId*2c*20*40message*0a*7c*20filter*20*40requestId*20*3d*20*27${requestId}*27*0a*7c*20sort*20*40timestamp*20desc*0a*7c*20limit*201000`;
-    newEditorStringParts.push(fallback);
-  }
+  const editorString = parseEditorString(currentEditorString);
+  // 純粋な requestId によるフィルタのみで構築したいので、その他のフィルタはすべて除外する
+  const withoutFilter = editorString.queryParts.filter((part) => part.type !== 'filter');
+  // requestId によるフィルタを追加する
+  const { isRequestIdExist } = isRequestIdOrMessageExistInFields(editorString);
+  const requestIdFilter = isRequestIdExist
+    ? ({ type: 'filter', text: `@requestId = '${requestId}'` } as const)
+    : ({ type: 'filter', text: `@message like /${requestId}/` } as const);
+  const newEditorStringParts: QueryPart[] = [];
+  newEditorStringParts.push(...withoutFilter);
+  newEditorStringParts.push(requestIdFilter);
+  const newEditorString = { queryParts: newEditorStringParts };
+  const newEditorStringEncoded = encodeEditorString(newEditorString);
 
-  const url = [base, newTimeQuery, '~editorString~', newEditorStringParts.join(''), otherQuery].join('');
+  const url = [base, newTimeQuery, `~editorString~'`, newEditorStringEncoded, otherQuery].join('');
 
   // 自動でクエリの実行をしたいので、パラメータに autoExecute=true を付与しておく
   const urlObject = new URL(url, window.location.origin); // window.location.origin を指定してベースURLを正しく設定
@@ -164,12 +163,86 @@ export function buildUrlWithReqIdFiltering(
   return urlObject.toString();
 }
 
-function isRequestIdOrMessageExistInFields(editorString: string): {
+function isRequestIdOrMessageExistInFields(editorString: EditorString): {
   isRequestIdExist: boolean;
   isMessageExist: boolean;
 } {
   return {
-    isRequestIdExist: editorString.includes('*40requestId'),
-    isMessageExist: editorString.includes('*40message'),
+    isRequestIdExist: editorString.queryParts.some((part) => {
+      if (part.type === 'fields') {
+        return part.fields.includes('@requestId');
+      }
+    }),
+    isMessageExist: editorString.queryParts.some((part) => {
+      if (part.type === 'fields') {
+        return part.fields.includes('@message');
+      }
+    }),
   };
+}
+
+type EditorString = {
+  queryParts: QueryPart[];
+};
+
+type QueryPart =
+  | { type: 'fields'; fields: string[] }
+  | { type: 'filter'; text: string }
+  | { type: 'sort'; text: string }
+  | { type: 'limit'; text: string };
+
+function parseEditorString(editorString: string): EditorString {
+  // 1. `*` を `%` に変換する
+  const replaced1 = editorString.replace(/\*/g, '%');
+  // 2. デコード
+  const decoded = decodeURIComponent(replaced1);
+  // 3. 改行は半角スペースに変換する
+  const replaced2 = decoded.replace(/\n/g, ' ');
+  // 4. パース
+  const strings = replaced2.split(' | ');
+  // 5. パース
+  const queryParts: QueryPart[] = [];
+  for (const str of strings) {
+    const firstSpaceIndex = str.indexOf(' ');
+    const type = str.substring(0, firstSpaceIndex);
+    const rest = str.substring(firstSpaceIndex + 1);
+    switch (type) {
+      case 'fields':
+        queryParts.push({ type, fields: rest.split(',').map((f) => f.trim()) });
+        break;
+      case 'filter':
+        queryParts.push({ type: 'filter', text: rest });
+        break;
+      case 'sort':
+        queryParts.push({ type, text: rest });
+        break;
+      case 'limit':
+        queryParts.push({ type, text: rest });
+        break;
+    }
+  }
+
+  return { queryParts };
+}
+
+function encodeEditorString(editorString: EditorString): string {
+  const parts = editorString.queryParts.map((part) => {
+    switch (part.type) {
+      case 'fields':
+        return `fields ${part.fields.join(', ')}`;
+      case 'filter':
+        return `filter ${part.text}`;
+      case 'sort':
+        return `sort ${part.text}`;
+      case 'limit':
+        return `limit ${part.text}`;
+    }
+  });
+
+  const joined = parts.join('\n| ');
+  const encoded = encodeURIComponent(joined);
+  const replaced = encoded.replace(/'/g, '%27');
+  const replaced2 = replaced.replace(/%/g, '*');
+
+  return replaced2;
 }
