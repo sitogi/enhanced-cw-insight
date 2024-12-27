@@ -140,15 +140,23 @@ export function buildUrlWithReqIdFiltering(
 
   const editorString = parseEditorString(currentEditorString);
   // 純粋な requestId によるフィルタのみで構築したいので、その他のフィルタはすべて除外する
-  const withoutFilter = editorString.queryParts.filter((part) => part.type !== 'filter');
-  // requestId によるフィルタを追加する
-  const { isRequestIdExist } = isRequestIdOrMessageExistInFields(editorString);
-  const requestIdFilter = isRequestIdExist
+  const withoutFilterParts = editorString.queryParts.filter((part) => part.type !== 'filter');
+  // requestId によるフィルタを作成
+  const requestIdFilterPart = hasRequestIdField(editorString)
     ? ({ type: 'filter', text: `@requestId = '${requestId}'` } as const)
     : ({ type: 'filter', text: `@message like /${requestId}/` } as const);
   const newEditorStringParts: QueryPart[] = [];
-  newEditorStringParts.push(...withoutFilter);
-  newEditorStringParts.push(requestIdFilter);
+  // limit がある場合はその前に追加してあげる。なければ末尾。
+  const limitIndex = withoutFilterParts.findIndex((part) => part.type === 'limit');
+  if (limitIndex !== -1) {
+    newEditorStringParts.push(...withoutFilterParts.slice(0, limitIndex));
+    newEditorStringParts.push(requestIdFilterPart);
+    newEditorStringParts.push(...withoutFilterParts.slice(limitIndex));
+  } else {
+    newEditorStringParts.push(...withoutFilterParts);
+    newEditorStringParts.push(requestIdFilterPart);
+  }
+
   const newEditorString = { queryParts: newEditorStringParts };
   const newEditorStringEncoded = encodeEditorString(newEditorString);
 
@@ -163,22 +171,12 @@ export function buildUrlWithReqIdFiltering(
   return urlObject.toString();
 }
 
-function isRequestIdOrMessageExistInFields(editorString: EditorString): {
-  isRequestIdExist: boolean;
-  isMessageExist: boolean;
-} {
-  return {
-    isRequestIdExist: editorString.queryParts.some((part) => {
-      if (part.type === 'fields') {
-        return part.fields.includes('@requestId');
-      }
-    }),
-    isMessageExist: editorString.queryParts.some((part) => {
-      if (part.type === 'fields') {
-        return part.fields.includes('@message');
-      }
-    }),
-  };
+function hasRequestIdField(editorString: EditorString): boolean {
+  return editorString.queryParts.some((part) => {
+    if (part.type === 'fields') {
+      return part.fields.includes('@requestId');
+    }
+  });
 }
 
 type EditorString = {
